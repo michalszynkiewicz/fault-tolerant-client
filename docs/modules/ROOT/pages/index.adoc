@@ -1,0 +1,52 @@
+= Quarkus - Fault Tolerant Rest Client Reactive
+:extension-status: preview
+
+This extension provides automatic fault tolerance for REST clients created with REST Client Reactive.
+
+== Concepts
+The extension is applied to *declarative clients injected with CDI* only.
+
+By default, there are two fault tolerance strategies:
+
+* `idempotent-calls` is applied to all idempotent operations
+* `non-idempotent-calls` (subject of name change)
+
+Unless otherwise specified by `@NonIdempotent` or `@Idempotent`:
+
+* all `GET`, `PUT`, `HEAD`, `OPTIONS`, `TRACE`, `DELETE` operations are assumed idempotent
+* all `POST`, `PATCH` are assumed non-idempotent
+
+
+The default behavior of the fault-tolerant strategies is to:
+
+* apply retry to all idempotent operations
+* do not do anything with non-idempotent operations
+
+Next steps:
+
+* All methods within a client share the same fault tolerance "instance", i.e. if you configure bulkhead or circuit breaker, all the calls made with a client will be taken into account collectively.
+
+// mstodo: making it work with non-cdi clients
+
+If a client
+
+
+
+
+== Installation
+
+If you want to use this extension, you need to add the `io.quarkiverse.fault-tolerant-rest-client-reactive:quarkus-fault-tolerant-rest-client-reactive` extension first.
+In your `pom.xml` file, add:
+
+[source,xml]
+----
+<dependency>
+    <groupId>io.quarkiverse.fault-tolerant-rest-client-reactive</groupId>
+    <artifactId>quarkus-fault-tolerant-rest-client-reactive</artifactId>
+</dependency>
+----
+
+[[extension-configuration-reference]]
+== Extension Configuration Reference
+
+include::config.adoc[leveloffset=+1, opts=optional]

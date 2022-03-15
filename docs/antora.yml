@@ -1,0 +1,5 @@
+name: quarkus-fault-tolerant-rest-client-reactive
+title: Quarkus - Fault Tolerant Rest Client Reactive
+version: dev
+nav:
+  - modules/ROOT/nav.adoc
