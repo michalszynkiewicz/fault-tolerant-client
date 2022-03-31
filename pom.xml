@@ -21,7 +21,7 @@
     <maven.compiler.release>11</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-    <quarkus.version>2.7.4.Final</quarkus.version>
+    <quarkus.version>999-SNAPSHOT</quarkus.version>
   </properties>
   <dependencyManagement>
     <dependencies>
@@ -54,7 +54,7 @@
       </plugins>
     </pluginManagement>
   </build>
-  <profiles>
+<!--  <profiles>
     <profile>
       <id>it</id>
       <activation>
@@ -67,5 +67,5 @@
         <module>integration-tests</module>
       </modules>
     </profile>
-  </profiles>
+  </profiles>-->
 </project>
