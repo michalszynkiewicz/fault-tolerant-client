@@ -1,14 +1,19 @@
 package io.quarkiverse.fault.tolerant.rest.client.reactive.deployment;
 
-import io.quarkiverse.fault.tolerant.rest.reactive.ApplyFaultToleranceGroup;
-import io.quarkiverse.fault.tolerant.rest.reactive.Idempotent;
-import io.quarkiverse.fault.tolerant.rest.reactive.NonIdempotent;
-import io.quarkus.arc.deployment.AnnotationsTransformerBuildItem;
-import io.quarkus.arc.processor.AnnotationsTransformer;
-import io.quarkus.deployment.annotations.BuildProducer;
-import io.quarkus.deployment.annotations.BuildStep;
-import io.quarkus.deployment.builditem.CombinedIndexBuildItem;
-import io.quarkus.deployment.builditem.FeatureBuildItem;
+import static java.util.function.Predicate.not;
+import static org.jboss.resteasy.reactive.common.processor.ResteasyReactiveDotNames.DELETE;
+import static org.jboss.resteasy.reactive.common.processor.ResteasyReactiveDotNames.GET;
+import static org.jboss.resteasy.reactive.common.processor.ResteasyReactiveDotNames.HEAD;
+import static org.jboss.resteasy.reactive.common.processor.ResteasyReactiveDotNames.OPTIONS;
+import static org.jboss.resteasy.reactive.common.processor.ResteasyReactiveDotNames.POST;
+import static org.jboss.resteasy.reactive.common.processor.ResteasyReactiveDotNames.PUT;
+
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 import org.eclipse.microprofile.rest.client.inject.RegisterRestClient;
 import org.jboss.jandex.AnnotationInstance;
 import org.jboss.jandex.AnnotationTarget;
@@ -19,27 +24,22 @@ import org.jboss.jandex.IndexView;
 import org.jboss.jandex.MethodInfo;
 import org.jboss.jandex.Type;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.function.Predicate;
-import java.util.stream.Collectors;
-
-import static java.util.function.Predicate.not;
-import static org.jboss.resteasy.reactive.common.processor.ResteasyReactiveDotNames.DELETE;
-import static org.jboss.resteasy.reactive.common.processor.ResteasyReactiveDotNames.GET;
-import static org.jboss.resteasy.reactive.common.processor.ResteasyReactiveDotNames.HEAD;
-import static org.jboss.resteasy.reactive.common.processor.ResteasyReactiveDotNames.OPTIONS;
-import static org.jboss.resteasy.reactive.common.processor.ResteasyReactiveDotNames.POST;
-import static org.jboss.resteasy.reactive.common.processor.ResteasyReactiveDotNames.PUT;
+import io.quarkiverse.fault.tolerant.rest.reactive.ApplyFaultToleranceGroup;
+import io.quarkiverse.fault.tolerant.rest.reactive.Idempotent;
+import io.quarkiverse.fault.tolerant.rest.reactive.NonIdempotent;
+import io.quarkus.arc.deployment.AdditionalBeanBuildItem;
+import io.quarkus.arc.deployment.AnnotationsTransformerBuildItem;
+import io.quarkus.arc.processor.AnnotationsTransformer;
+import io.quarkus.deployment.annotations.BuildProducer;
+import io.quarkus.deployment.annotations.BuildStep;
+import io.quarkus.deployment.builditem.CombinedIndexBuildItem;
+import io.quarkus.deployment.builditem.FeatureBuildItem;
 
 class FaultTolerantRestClientReactiveProcessor {
     private static final Set<DotName> HTTP_OPERATIONS = Set.of(GET, POST, PUT, DELETE, OPTIONS, HEAD);
     private static final Set<DotName> NON_IDEMPOTENT_OPERATIONS = Set.of(POST);
-    private static final Set<DotName> IDEMPOTENT_OPERATIONS =
-            Set.copyOf(HTTP_OPERATIONS).stream().filter(not(NON_IDEMPOTENT_OPERATIONS::contains)).collect(Collectors.toSet());
+    private static final Set<DotName> IDEMPOTENT_OPERATIONS = Set.copyOf(HTTP_OPERATIONS).stream()
+            .filter(not(NON_IDEMPOTENT_OPERATIONS::contains)).collect(Collectors.toSet());
 
     private static final DotName IDEMPOTENT = DotName.createSimple(Idempotent.class.getName());
     private static final DotName NON_IDEMPOTENT = DotName.createSimple(NonIdempotent.class.getName());
@@ -54,8 +54,13 @@ class FaultTolerantRestClientReactiveProcessor {
     }
 
     @BuildStep
+    void registerInterceptor(BuildProducer<AdditionalBeanBuildItem> unremovableBeans) {
+        unremovableBeans.produce(AdditionalBeanBuildItem.unremovableOf(ApplyFaultToleranceGroup.class.getName()));
+    }
+
+    @BuildStep
     void addFaultTolerance(CombinedIndexBuildItem indexBuildItem,
-                           BuildProducer<AnnotationsTransformerBuildItem> annotationTransformers) {
+            BuildProducer<AnnotationsTransformerBuildItem> annotationTransformers) {
         IndexView index = indexBuildItem.getIndex();
         Set<AnnotationInstance> registerRestClientAnnos = new HashSet<>(index.getAnnotations(REGISTER_REST_CLIENT));
 
@@ -91,7 +96,7 @@ class FaultTolerantRestClientReactiveProcessor {
             }
         }
 
-        annotationTransformers.produce( new AnnotationsTransformerBuildItem(new AnnotationsTransformer() {
+        annotationTransformers.produce(new AnnotationsTransformerBuildItem(new AnnotationsTransformer() {
             @Override
             public void transform(TransformationContext transformationContext) {
                 MethodInfo method = transformationContext.getTarget().asMethod();
@@ -119,7 +124,7 @@ class FaultTolerantRestClientReactiveProcessor {
     }
 
     private boolean isOfType(MethodInfo method, Set<DotName> httpMethods,
-                             DotName operationType, DotName oppositeOperationType) {
+            DotName operationType, DotName oppositeOperationType) {
         if (method.annotation(operationType) != null) {
             return true;
         }
