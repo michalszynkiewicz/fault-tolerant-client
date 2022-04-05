@@ -13,6 +13,7 @@ import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.core.Response;
 
+import org.eclipse.microprofile.faulttolerance.Retry;
 import org.eclipse.microprofile.rest.client.inject.RegisterRestClient;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.jboss.resteasy.reactive.ClientWebApplicationException;
@@ -50,11 +51,12 @@ public class DefaultFaultToleranceTest {
         assertThatThrownBy(() -> client.getThatShouldFail()).isInstanceOf(ClientWebApplicationException.class);
     }
 
-    @Path("/foo")
+    @Path("/")
     @RegisterRestClient(baseUri = "http://localhost:8081")
     public interface Client {
         @GET
         @Path("/fail-on-first-attempt/1")
+        //        @ApplyFaultToleranceGroup("idempotent")
         String getThatShouldBeRetried();
 
         @GET
@@ -65,6 +67,7 @@ public class DefaultFaultToleranceTest {
         @POST
         @Path("/fail-on-first-attempt/3")
         @Idempotent
+        @Retry
         String postThatShouldBeRetried();
 
         @POST

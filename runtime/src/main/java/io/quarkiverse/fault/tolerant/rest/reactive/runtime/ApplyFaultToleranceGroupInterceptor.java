@@ -20,7 +20,8 @@ public class ApplyFaultToleranceGroupInterceptor {
     private final Map<Method, FaultTolerance<?>> faultToleranceForMethod = new HashMap<>();
 
     @AroundInvoke
-    void wrapInFaultTolerance(InvocationContext context) {
+    Object wrapInFaultTolerance(InvocationContext context) {
         Object bindings = context.getContextData().get(ArcInvocationContext.KEY_INTERCEPTOR_BINDINGS);
+        return null;
     }
 }

@@ -8,10 +8,12 @@ import static org.jboss.resteasy.reactive.common.processor.ResteasyReactiveDotNa
 import static org.jboss.resteasy.reactive.common.processor.ResteasyReactiveDotNames.POST;
 import static org.jboss.resteasy.reactive.common.processor.ResteasyReactiveDotNames.PUT;
 
+import java.io.Closeable;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import org.eclipse.microprofile.rest.client.inject.RegisterRestClient;
@@ -27,6 +29,7 @@ import org.jboss.jandex.Type;
 import io.quarkiverse.fault.tolerant.rest.reactive.ApplyFaultToleranceGroup;
 import io.quarkiverse.fault.tolerant.rest.reactive.Idempotent;
 import io.quarkiverse.fault.tolerant.rest.reactive.NonIdempotent;
+import io.quarkiverse.fault.tolerant.rest.reactive.runtime.ApplyFaultToleranceGroupInterceptor;
 import io.quarkus.arc.deployment.AdditionalBeanBuildItem;
 import io.quarkus.arc.deployment.AnnotationsTransformerBuildItem;
 import io.quarkus.arc.processor.AnnotationsTransformer;
@@ -34,6 +37,7 @@ import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
 import io.quarkus.deployment.builditem.CombinedIndexBuildItem;
 import io.quarkus.deployment.builditem.FeatureBuildItem;
+import io.quarkus.runtime.MockedThroughWrapper;
 
 class FaultTolerantRestClientReactiveProcessor {
     private static final Set<DotName> HTTP_OPERATIONS = Set.of(GET, POST, PUT, DELETE, OPTIONS, HEAD);
@@ -47,6 +51,8 @@ class FaultTolerantRestClientReactiveProcessor {
     private static final DotName REGISTER_REST_CLIENT = DotName.createSimple(RegisterRestClient.class.getName());
 
     private static final String FEATURE = "fault-tolerant-rest-client-reactive";
+    private static final Set<DotName> SKIPPED_INTERFACES = Set.of(DotName.createSimple(Closeable.class.getName()),
+            DotName.createSimple(MockedThroughWrapper.class.getName()), DotName.createSimple(AutoCloseable.class.getName()));
 
     @BuildStep
     FeatureBuildItem feature() {
@@ -54,8 +60,9 @@ class FaultTolerantRestClientReactiveProcessor {
     }
 
     @BuildStep
-    void registerInterceptor(BuildProducer<AdditionalBeanBuildItem> unremovableBeans) {
-        unremovableBeans.produce(AdditionalBeanBuildItem.unremovableOf(ApplyFaultToleranceGroup.class.getName()));
+    void registerInterceptor(BuildProducer<AdditionalBeanBuildItem> additionalBeans) {
+        additionalBeans.produce(AdditionalBeanBuildItem.builder().addBeanClasses(ApplyFaultToleranceGroup.class,
+                ApplyFaultToleranceGroupInterceptor.class).setUnremovable().build()); // mstodo setUnremovable is not necessary
     }
 
     @BuildStep
@@ -69,7 +76,7 @@ class FaultTolerantRestClientReactiveProcessor {
                 .map(AnnotationTarget::asClass)
                 .collect(Collectors.toSet());
         Set<ClassInfo> scannedClasses = new HashSet<>();
-        Map<MethodInfo, String> faultToleranceGroups = new HashMap<>();
+        Map<MethodInfo, String> faultToleranceGroupsForInterfaces = new HashMap<>();
         while (!classesToScan.isEmpty()) {
             ClassInfo toScan = classesToScan.iterator().next();
             classesToScan.remove(toScan);
@@ -84,7 +91,7 @@ class FaultTolerantRestClientReactiveProcessor {
                         faultToleranceGroup = "nonIdempotent";
                     }
                     if (faultToleranceGroup != null) {
-                        faultToleranceGroups.put(method, faultToleranceGroup);
+                        faultToleranceGroupsForInterfaces.put(method, faultToleranceGroup);
                     }
                     // todo support for custom groups
                 } else if (isReturningAnObject(method)) {
@@ -96,14 +103,43 @@ class FaultTolerantRestClientReactiveProcessor {
             }
         }
 
+        Map<MethodInfo, String> faultToleranceGroups = new ConcurrentHashMap<>(); // mstodo remove?
+        // we gathered interface methods, let's find their implementations now:
+        for (Map.Entry<MethodInfo, String> methodEntry : faultToleranceGroupsForInterfaces.entrySet()) {
+            MethodInfo interfaceMethod = methodEntry.getKey();
+            for (ClassInfo implementor : index.getAllKnownImplementors(interfaceMethod.declaringClass().name())) {
+                if (implementor.name().toString().endsWith("CDIWrapper")) {
+                    // CDIWrapper has to have all the methods of our interest defined, they have the same signature
+                    MethodInfo implementorMethod = implementor.method(interfaceMethod.name(),
+                            interfaceMethod.parameters().toArray(Type.EMPTY_ARRAY));
+                    faultToleranceGroups.put(implementorMethod, methodEntry.getValue());
+                }
+            }
+        }
+
         annotationTransformers.produce(new AnnotationsTransformerBuildItem(new AnnotationsTransformer() {
             @Override
             public void transform(TransformationContext transformationContext) {
                 MethodInfo method = transformationContext.getTarget().asMethod();
-                String groupName = faultToleranceGroups.get(method);
-                if (groupName != null) {
-                    transformationContext.transform().add(DotName.createSimple(ApplyFaultToleranceGroup.class.getName()),
-                            AnnotationValue.createStringValue("value", groupName));
+                ClassInfo wrapperClass = method.declaringClass();
+                if (wrapperClass.name().toString().endsWith("CDIWrapper")) {
+                    for (DotName interfaceName : wrapperClass.interfaceNames()) {
+                        if (SKIPPED_INTERFACES.contains(interfaceName)) {
+                            continue;
+                        }
+
+                        ClassInfo interfaceClass = index.getClassByName(interfaceName);
+                        MethodInfo interfaceMethod = interfaceClass.method(method.name(),
+                                method.parameters().toArray(Type.EMPTY_ARRAY));
+                        if (interfaceMethod != null) {
+                            String groupName = faultToleranceGroupsForInterfaces.get(interfaceMethod);
+                            if (groupName != null) {
+                                transformationContext.transform().add(
+                                        DotName.createSimple(ApplyFaultToleranceGroup.class.getName()),
+                                        AnnotationValue.createStringValue("value", groupName));
+                            }
+                        }
+                    }
                 }
             }
 
