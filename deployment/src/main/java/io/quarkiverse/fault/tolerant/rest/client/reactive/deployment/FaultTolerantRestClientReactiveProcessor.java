@@ -103,20 +103,6 @@ class FaultTolerantRestClientReactiveProcessor {
             }
         }
 
-        Map<MethodInfo, String> faultToleranceGroups = new ConcurrentHashMap<>(); // mstodo remove?
-        // we gathered interface methods, let's find their implementations now:
-        for (Map.Entry<MethodInfo, String> methodEntry : faultToleranceGroupsForInterfaces.entrySet()) {
-            MethodInfo interfaceMethod = methodEntry.getKey();
-            for (ClassInfo implementor : index.getAllKnownImplementors(interfaceMethod.declaringClass().name())) {
-                if (implementor.name().toString().endsWith("CDIWrapper")) {
-                    // CDIWrapper has to have all the methods of our interest defined, they have the same signature
-                    MethodInfo implementorMethod = implementor.method(interfaceMethod.name(),
-                            interfaceMethod.parameters().toArray(Type.EMPTY_ARRAY));
-                    faultToleranceGroups.put(implementorMethod, methodEntry.getValue());
-                }
-            }
-        }
-
         annotationTransformers.produce(new AnnotationsTransformerBuildItem(new AnnotationsTransformer() {
             @Override
             public void transform(TransformationContext transformationContext) {
