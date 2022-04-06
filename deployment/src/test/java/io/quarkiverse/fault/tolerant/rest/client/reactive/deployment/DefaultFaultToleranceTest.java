@@ -51,12 +51,21 @@ public class DefaultFaultToleranceTest {
         assertThatThrownBy(() -> client.getThatShouldFail()).isInstanceOf(ClientWebApplicationException.class);
     }
 
+    @Test
+    void shouldNotAutomaticallyRetryPost() {
+        assertThatThrownBy(() -> client.postThatShouldFail()).isInstanceOf(ClientWebApplicationException.class);
+    }
+
+    @Test
+    void shouldRetryPostIfMarkedIdempotent() {
+        assertThat(client.postThatShouldBeRetried()).isEqualTo(SECOND_ATTEMPT);
+    }
+
     @Path("/")
     @RegisterRestClient(baseUri = "http://localhost:8081")
     public interface Client {
         @GET
         @Path("/fail-on-first-attempt/1")
-        //        @ApplyFaultToleranceGroup("idempotent")
         String getThatShouldBeRetried();
 
         @GET

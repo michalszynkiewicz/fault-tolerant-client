@@ -28,7 +28,7 @@ public class InterceptorTest {
     public static class MyBean {
         AtomicInteger failures = new AtomicInteger();
 
-        @ApplyFaultToleranceGroup("idempotent")
+        @ApplyFaultToleranceGroup(value = "idempotent", isAsync = false, groupKey = "fff", returnType = String.class)
         String failOnce() {
             if (failures.getAndIncrement() < 1) {
                 throw new RuntimeException("Failure");

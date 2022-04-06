@@ -16,6 +16,28 @@ import javax.interceptor.InterceptorBinding;
 @Documented
 @InterceptorBinding
 public @interface ApplyFaultToleranceGroup {
+    /**
+     * @return name of the group producer
+     */
     @Nonbinding
     String value();
+
+    /**
+     * @return identifier of the group
+     */
+    @Nonbinding
+    String groupKey(); // to identify the group
+
+    /**
+     *
+     * @return return class of the guarded method
+     */
+    @Nonbinding
+    Class<?> returnType();
+
+    /**
+     * @return if {@link FaultToleranceGroup#buildAsync} should be used
+     */
+    @Nonbinding
+    boolean isAsync();
 }

@@ -32,7 +32,8 @@ public class FaultToleranceStrategyProvider {
     }
 
     public FaultToleranceGroup get(String name) {
-        return producerByName.get(name).create();
+        FaultToleranceGroupProducer producer = producerByName.get(name);
+        return producer == null ? null : producer.create();
     }
 
 }

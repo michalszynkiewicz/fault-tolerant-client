@@ -1,19 +1,21 @@
 package io.quarkiverse.fault.tolerant.rest.client.reactive.deployment;
 
 import static java.util.function.Predicate.not;
+import static org.jboss.resteasy.reactive.common.processor.ResteasyReactiveDotNames.COMPLETION_STAGE;
 import static org.jboss.resteasy.reactive.common.processor.ResteasyReactiveDotNames.DELETE;
 import static org.jboss.resteasy.reactive.common.processor.ResteasyReactiveDotNames.GET;
 import static org.jboss.resteasy.reactive.common.processor.ResteasyReactiveDotNames.HEAD;
+import static org.jboss.resteasy.reactive.common.processor.ResteasyReactiveDotNames.MULTI;
 import static org.jboss.resteasy.reactive.common.processor.ResteasyReactiveDotNames.OPTIONS;
 import static org.jboss.resteasy.reactive.common.processor.ResteasyReactiveDotNames.POST;
 import static org.jboss.resteasy.reactive.common.processor.ResteasyReactiveDotNames.PUT;
+import static org.jboss.resteasy.reactive.common.processor.ResteasyReactiveDotNames.UNI;
 
 import java.io.Closeable;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import org.eclipse.microprofile.rest.client.inject.RegisterRestClient;
@@ -28,8 +30,10 @@ import org.jboss.jandex.Type;
 
 import io.quarkiverse.fault.tolerant.rest.reactive.ApplyFaultToleranceGroup;
 import io.quarkiverse.fault.tolerant.rest.reactive.Idempotent;
+import io.quarkiverse.fault.tolerant.rest.reactive.IdempotentGroupProducerImpl;
 import io.quarkiverse.fault.tolerant.rest.reactive.NonIdempotent;
 import io.quarkiverse.fault.tolerant.rest.reactive.runtime.ApplyFaultToleranceGroupInterceptor;
+import io.quarkiverse.fault.tolerant.rest.reactive.runtime.FaultToleranceStrategyProvider;
 import io.quarkus.arc.deployment.AdditionalBeanBuildItem;
 import io.quarkus.arc.deployment.AnnotationsTransformerBuildItem;
 import io.quarkus.arc.processor.AnnotationsTransformer;
@@ -53,6 +57,7 @@ class FaultTolerantRestClientReactiveProcessor {
     private static final String FEATURE = "fault-tolerant-rest-client-reactive";
     private static final Set<DotName> SKIPPED_INTERFACES = Set.of(DotName.createSimple(Closeable.class.getName()),
             DotName.createSimple(MockedThroughWrapper.class.getName()), DotName.createSimple(AutoCloseable.class.getName()));
+    private static final Set<DotName> ASYNC_TYPES = Set.of(COMPLETION_STAGE, UNI, MULTI);
 
     @BuildStep
     FeatureBuildItem feature() {
@@ -62,7 +67,9 @@ class FaultTolerantRestClientReactiveProcessor {
     @BuildStep
     void registerInterceptor(BuildProducer<AdditionalBeanBuildItem> additionalBeans) {
         additionalBeans.produce(AdditionalBeanBuildItem.builder().addBeanClasses(ApplyFaultToleranceGroup.class,
-                ApplyFaultToleranceGroupInterceptor.class).setUnremovable().build()); // mstodo setUnremovable is not necessary
+                ApplyFaultToleranceGroupInterceptor.class,
+                FaultToleranceStrategyProvider.class,
+                IdempotentGroupProducerImpl.class).build()); // mstodo setUnremovable is not necessary
     }
 
     @BuildStep
@@ -120,9 +127,17 @@ class FaultTolerantRestClientReactiveProcessor {
                         if (interfaceMethod != null) {
                             String groupName = faultToleranceGroupsForInterfaces.get(interfaceMethod);
                             if (groupName != null) {
+                                DotName returnType = method.returnType().name();
+                                // mstodo check if is assignable instaed of :
+                                boolean isAsync = ASYNC_TYPES.contains(returnType);
                                 transformationContext.transform().add(
                                         DotName.createSimple(ApplyFaultToleranceGroup.class.getName()),
-                                        AnnotationValue.createStringValue("value", groupName));
+                                        AnnotationValue.createStringValue("value", groupName),
+                                        AnnotationValue.createStringValue("groupKey", interfaceName.toString()),
+                                        AnnotationValue.createClassValue("returnType",
+                                                Type.create(returnType, Type.Kind.CLASS)),
+                                        AnnotationValue.createBooleanValue("isAsync", isAsync))
+                                        .done();
                             }
                         }
                     }
